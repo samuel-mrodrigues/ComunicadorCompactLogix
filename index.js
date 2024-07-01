@@ -1,4 +1,5 @@
 import express from "express";
+import { RequisicaoExpress } from "./utils/RequisicaoExpress.js"
 import { Logger } from "./utils/Logger.js";
 
 import { cadastrarEndpoints } from "./endpoints/endpoints.js";
@@ -20,20 +21,19 @@ export function getLogger() {
 // Instancia Express
 const instanciaExpress = express();
 
-
 /**
  * Fazer todo o inicio do backend
  */
 async function iniciarBackend() {
     LoggerIndex.log(`Iniciando o backend...`);
 
-    instanciaExpress.use(tratarOPTIONS)
+    instanciaExpress.use(tratarOPTIONS);
     instanciaExpress.use(tratarCorpoRequisicao);
 
     iniciarEstado();
     cadastrarEndpoints();
 
-    instanciaExpress.use(tratarEndpointInvalido)
+    instanciaExpress.use(tratarEndpointInvalido);
 
     instanciaExpress.listen(3009, () => {
         LoggerIndex.log(`Backend iniciado na porta 3009`);
@@ -111,7 +111,7 @@ function tratarCorpoRequisicao(req, resp, next) {
     }
 }
 
-// iniciarBackend();
+iniciarBackend();
 
 /**
  * Retorna a instancia do express
@@ -131,6 +131,7 @@ export function getInstanciaExpress() {
  * @param {CallbackOnRequisicaoRecebida} callback - Função a ser chamada quando a requisição for recebida
  */
 export function addPOST(endpoint, callback) {
+    LoggerIndex.log(`Adicionando endpoint POST ${endpoint}`);
     instanciaExpress.post(endpoint, async (req, resp) => {
         const novaRequisicao = new RequisicaoExpress(req, resp);
         try {
@@ -148,6 +149,7 @@ export function addPOST(endpoint, callback) {
  * @param {CallbackOnRequisicaoRecebida} callback - Função a ser chamada quando a requisição for recebida
  */
 export function addGET(endpoint, callback) {
+    LoggerIndex.log(`Adicionando endpoint GET ${endpoint}`);
     instanciaExpress.get(endpoint, async (req, resp) => {
         const novaRequisicao = new RequisicaoExpress(req, resp);
         try {
@@ -159,11 +161,3 @@ export function addGET(endpoint, callback) {
     })
 }
 
-
-// ------------------
-console.log(`Testando...`);
-
-import { CompactLogix } from "./estado/CompactLogix/CompactLogix.js";
-
-const testeCompact = new CompactLogix('192.168.3.120');
-testeCompact.conectar2();

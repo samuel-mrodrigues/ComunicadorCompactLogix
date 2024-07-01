@@ -13,6 +13,7 @@
   "dependencies": {
     "express": "^4.19.2",
     "node-drivers": "^2.0.2",
-    "st-ethernet-ip": "^2.7.3"
+    "st-ethernet-ip": "^2.7.3",
+    "uuid": "^10.0.0"
   }
 }
