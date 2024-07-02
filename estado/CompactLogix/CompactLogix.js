@@ -38,6 +38,7 @@ function cadastrarCompactFundicao() {
     novoCompact.conectar();
     novoCompact.iniciarVerificadorConexao();
     novoCompact.togglePing(true);
+    novoCompact.togglePingsConsole(false);
 
     compactLogixs.push(novoCompact);
 
@@ -117,6 +118,7 @@ export class CompactLogix {
          * Se atualmente o CompactLogix esta conectadoF
          */
         isConectado: false,
+        isExibirPingConsole: false,
         /**
          * Se existe uma solicitação de ping pendente
          */
@@ -228,13 +230,13 @@ export class CompactLogix {
 
                     this.estado.isEnviandoPing = true;
 
-                    this.log(`Enviando ping ao CompactLogix...`);
+                    this.log(`Enviando ping ao CompactLogix...`, this.estado.isExibirPingConsole);
                     try {
                         await this.estado.CompactLogixInstancia.readControllerProps();
-                        this.log(`Ping enviado com sucesso ao CompactLogix`);
+                        this.log(`Ping enviado com sucesso ao CompactLogix`, this.estado.isExibirPingConsole);
                         this.estado.isConectado = true;
                     } catch (ex) {
-                        this.log(`Erro ao enviar ping ao CompactLogix: ${ex}`);
+                        this.log(`Erro ao enviar ping ao CompactLogix: ${ex}`, this.estado.isExibirPingConsole);
                         this.estado.isConectado = false;
                     }
 
@@ -244,6 +246,19 @@ export class CompactLogix {
         } else {
             this.log(`Desativando envio de pings ao CompactLogix`);
             clearInterval(this.estado.idSetIntervalPingConexao);
+        }
+    }
+
+    /**
+     * Não exibir as mensagens de ping via console
+     */
+    togglePingsConsole(bool) {
+        if (bool) {
+            this.log(`Ativando exibição de pings via console`);
+            this.estado.isExibirPingConsole = true;
+        } else {
+            this.log(`Desativando exibição de pings via console`);
+            this.estado.isExibirPingConsole = false;
         }
     }
 
@@ -504,15 +519,28 @@ export class CompactLogix {
             historicoLeituraTag.valor = historicoLeituraTag.objetoTagEstatisticas.value;
         } catch (ex) {
             if (typeof ex == "object") {
-                // O erro 4 é geralmente erro de path, quase certeza que é pq a tag não existe
-                if (ex.generalStatusCode == 4) {
-                    historicoLeituraTag.estado.isTagExiste = false;
-                    historicoLeituraTag.estado.motivoNaoLida.descricao = `A tag não existe no CompactLogix. Erro Original: ${JSON.stringify(ex)}`
-                } else if (ex.message.toLowerCase().includes('timeout')) {
-                    historicoLeituraTag.estado.isDemorouLer = true;
-                    historicoLeituraTag.estado.motivoNaoLida.descricao = `O CompactLogix não respondeu a tempo. Erro Original: ${ex.message}`;
+
+                // Se for um erro que retornou algo do compact, geralmente retorna um generalStatusCode do motivo do erro
+                if (ex.generalStatusCode != undefined) {
+
+                    // O erro 4 é que o caminho pra tag não existe
+                    if (ex.generalStatusCode == 4) {
+                        historicoLeituraTag.estado.isTagExiste = false;
+                        historicoLeituraTag.estado.motivoNaoLida.descricao = `A tag não existe no CompactLogix. Erro Original: ${JSON.stringify(ex)}`
+                    }
+
+                    // Informou um caminho para o objeto na tag que não existe, como informar um espaço de um array que não existe
+                    if (ex.generalStatusCode == 5) {
+                        historicoLeituraTag.estado.isTagExiste = false;
+                        historicoLeituraTag.estado.motivoNaoLida.descricao = `O caminho do objeto especificado na tag não existe no CompactLogix. Erro Original: ${JSON.stringify(ex)}`
+                    }
                 } else {
-                    historicoLeituraTag.estado.motivoNaoLida.descricao = `O CompactLogix retornou o erro: General Status Code ${ex.generalStatusCode}`;
+                    if (ex.message.toLowerCase().includes('timeout')) {
+                        historicoLeituraTag.estado.isDemorouLer = true;
+                        historicoLeituraTag.estado.motivoNaoLida.descricao = `O CompactLogix não respondeu a tempo. Erro Original: ${JSON.stringify(ex)}`;
+                    } else {
+                        historicoLeituraTag.estado.motivoNaoLida.descricao = `O CompactLogix retornou o erro:  ${JSON.stringify(ex)}`;
+                    }
                 }
             }
         }
@@ -521,6 +549,76 @@ export class CompactLogix {
         retornoLeitura.sucesso.tagLida = historicoLeituraTag;
 
         return retornoLeitura;
+    }
+
+    /**
+     * Setar uma tag com um novo valor
+     * @param {String} tag - Nome da tag
+     * @param {String} valor - Valor para aplicar
+     */
+    async setTag(tag, valor) {
+        const retornoSetarTag = {
+            /**
+             * Se a operação de setar o valor da tag deu certo
+             */
+            isSucesso: false,
+            /**
+             * Detalhes do erro se não sucesso
+             */
+            erro: {
+                descricao: '',
+                /**
+                 * Não deu pra ler as informações da tag(é obrigatorio ler antes pra pegar os dados da tag pra setar)
+                 */
+                isErroLerInformacoesTag: false,
+                /**
+                 * A TAG não existe
+                 */
+                isTagNaoExiste: false,
+                /**
+                 * Demorou demais pra ler a tag
+                 */
+                isTagDemorouEscrever: false,
+                /**
+                 * Ocorreu um erro desconhecido
+                 */
+                isErroDesconhecido: false
+            }
+        }
+
+        const lerTagAtual = await this.lerTag(tag);
+        if (!lerTagAtual.isSucesso) {
+            retornoSetarTag.erro.descricao = `Erro ao invocar a leitura da tag ${tag} para setar o valor. Motivo: ${lerTagAtual.erro.descricao}`;
+            return retornoSetarTag;
+        }
+
+        if (!lerTagAtual.sucesso.tagLida.estado.IsJaLeuSucesso) {
+            retornoSetarTag.erro.descricao = `Erro ao tentar ler a tag ${tag}. Motivo: ${lerTagAtual.sucesso.tagLida.estado.motivoNaoLida.descricao}`;
+            retornoSetarTag.erro.isErroLerInformacoesTag = true;
+            return retornoSetarTag;
+        }
+
+        if (!lerTagAtual.sucesso.tagLida.estado.isTagExiste) {
+            retornoSetarTag.erro.descricao = `A tag ${tag} não existe`;
+            retornoSetarTag.erro.isTagNaoExiste = true;
+            return retornoSetarTag
+        }
+
+        try {
+            await this.estado.CompactLogixInstancia.writeTag(lerTagAtual.sucesso.tagLida.objetoTagEstatisticas, valor);
+
+            retornoSetarTag.isSucesso = true
+        } catch (ex) {
+            if (ex.message.toLowerCase().includes('timeout')) {
+                retornoSetarTag.erro.descricao = `O CompactLogix não respondeu a tempo para setar o valor da tag ${tag}`;
+                retornoSetarTag.erro.isTagDemorouEscrever = true;
+            } else {
+                retornoSetarTag.erro.descricao = `Erro desconhecido ao tentar setar o valor da tag ${tag}. Motivo: ${ex.message}`;
+                retornoSetarTag.erro.isErroDesconhecido = true;
+            }
+        }
+
+        return retornoSetarTag;
     }
 
     /**
@@ -703,7 +801,7 @@ export class CompactLogix {
      * Escrever um log desse store
      * @param {String} msg - String ou objeto para mostrar no console
      */
-    log(msg) {
+    log(msg, isExibirCoonsole = true) {
         let conteudoMsg = ''
         if (typeof msg == 'object') {
             conteudoMsg = JSON.stringify(msg, null, 4);
@@ -711,6 +809,8 @@ export class CompactLogix {
             conteudoMsg = msg;
         }
 
-        this.logger.log(`[CompactLogix ${this.configuracao.ip}] ${conteudoMsg}`)
+        this.logger.log(`[CompactLogix ${this.configuracao.ip}] ${conteudoMsg}`, {
+            mostrarNoConsole: isExibirCoonsole
+        })
     }
 }   

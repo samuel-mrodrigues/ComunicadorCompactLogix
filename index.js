@@ -4,6 +4,7 @@ import { Logger } from "./utils/Logger.js";
 
 import { cadastrarEndpoints } from "./endpoints/endpoints.js";
 import { iniciar as iniciarEstado } from "./estado/estado.js";
+import { CompactLogix } from "./estado/CompactLogix/CompactLogix.js";
 
 const LoggerIndex = new Logger('Inicio', {
     isHabilitarLogConsole: true,
@@ -112,6 +113,20 @@ function tratarCorpoRequisicao(req, resp, next) {
 }
 
 iniciarBackend();
+
+// teste();
+async function teste() {
+    const testeCompact = new CompactLogix('192.168.3.120');
+
+    await testeCompact.conectar();
+    testeCompact.togglePing();
+
+    // let valorTag = await testeCompact.lerTag('TESTE');
+    // console.log(valorTag);
+
+    let escreveTag = await testeCompact.lerTag('TESTE[0]');
+    console.log(escreveTag);
+}
 
 /**
  * Retorna a instancia do express

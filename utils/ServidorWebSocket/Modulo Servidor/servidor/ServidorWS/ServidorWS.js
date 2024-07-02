@@ -176,4 +176,12 @@ export class ServidorWS {
     getClientes() {
         return this.#clientes;
     }
+
+    /**
+     * Remover um cliente da lista de clientes
+     * @param {String} uuid - UUID do cliente conectado
+     */
+    removeCliente(uuid) {
+        this.#clientes = this.#clientes.filter(cliente => cliente.getUUID() != uuid);
+    }
 }

@@ -70,8 +70,8 @@ export class Logger {
         }
 
         if (parametros != undefined) {
-            if (parametros.escreverNoArquivo) parametrosDefinidos.isDeveEscreverArquivo = parametros.escreverNoArquivo
-            if (parametros.mostrarNoConsole) parametrosDefinidos.isDeveMostrarConsole = parametros.mostrarNoConsole
+            if (parametros.escreverNoArquivo != undefined) parametrosDefinidos.isDeveEscreverArquivo = parametros.escreverNoArquivo
+            if (parametros.mostrarNoConsole != undefined) parametrosDefinidos.isDeveMostrarConsole = parametros.mostrarNoConsole
         }
 
         let conteudoMsg = '';

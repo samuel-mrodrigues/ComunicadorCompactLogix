@@ -15,6 +15,8 @@ export class ClienteWS {
      */
     #mensagensPendentes = []
 
+    idConexaoUnico = this.#getUUIDUnico();
+
     /**
      * Instanciar um novo cliente
      */

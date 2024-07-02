@@ -1,4 +1,4 @@
-import { addGET } from "../../../index.js";
+import { addGET, addPOST } from "../../../index.js";
 import { getCompactLogix } from "../../../estado/CompactLogix/CompactLogix.js";
 import { formatarDataParaString } from "../../../utils/Utils.js";
 
@@ -8,6 +8,7 @@ import { formatarDataParaString } from "../../../utils/Utils.js";
 export function cadastrar() {
     cadastrarConsultarCompactLogix();
     cadastrarLerTagCompactLogix();
+    cadastrarSetTagCompactLogix();
 }
 
 /**
@@ -15,7 +16,6 @@ export function cadastrar() {
  */
 function cadastrarConsultarCompactLogix() {
     addGET('/equipamentos/compactlogix', (requisicao) => {
-
         const compacts = getCompactLogix();
 
         requisicao.aprovar('compactlogix-sucesso', 'CompactLogix listados com sucesso', {
@@ -147,4 +147,44 @@ function cadastrarLerTagCompactLogix() {
 
         return requisicao.aprovar('compactlogix-tag-lida', `Tag ${tagDesejada} lida com sucesso`, informacoesTag).devolverResposta();
     })
+}
+/**
+ * Setar uma tag com um novo valor
+ */
+function cadastrarSetTagCompactLogix() {
+    addPOST('/equipamentos/compactlogix/:idcompact/tags/:tag', async (requisicao) => {
+        const idCompact = requisicao.getParametrosURL().idcompact
+        const tagDesejada = requisicao.getParametrosURL().tag
+        const novoValor = requisicao.getBody().novoValor;
+
+        if (novoValor == undefined) {
+            requisicao.recusar('novovalor-nao-informado', 'O novo valor da tag não foi informado').devolverResposta();
+            return;
+        }
+
+        const compact = getCompactLogix().find((compactObj) => compactObj.idUnico === idCompact);
+        if (!compact) {
+            requisicao.recusar('compactlogix-nao-encontrado', `CompactLogix não encontrado pelo id ${idCompact}`).devolverResposta();
+            return;
+        }
+
+        // Solicitar a escrita da tag
+        const statusSolicitaWriteTag = await compact.setTag(tagDesejada, novoValor);
+        if (!statusSolicitaWriteTag.isSucesso) {
+            if (statusSolicitaWriteTag.erro.isErroDesconhecido) {
+                requisicao.recusar(`erro-desconhecido`, `Ocorreu algum erro desconhecido ao tentar escrever a tag: ${statusSolicitaWriteTag.erro.descricao}`);
+            } else if (statusSolicitaWriteTag.erro.isErroLerInformacoesTag) {
+                requisicao.recusar(`erro-ler-tag`, `Não foi possível ler as informações da tag ${tagDesejada} para escrever um novo valor. Motivo: ${statusSolicitaWriteTag.erro.descricao}`);
+            } else if (statusSolicitaWriteTag.erro.isTagDemorouEscrever) {
+                requisicao.recusar(`tag-demorou-escrever`, `A tag ${tagDesejada} demorou demais para ser escrita. Motivo: ${statusSolicitaWriteTag.erro.descricao}`);
+            } else if (statusSolicitaWriteTag.erro.isTagNaoExiste) {
+                requisicao.recusar(`tag-nao-existe`, `A tag ${tagDesejada} não existe no CompactLogix. Motivo: ${statusSolicitaWriteTag.erro.descricao}`);
+            }
+
+            return requisicao.devolverResposta();
+        }
+
+        // Escreveu com sucesso
+        requisicao.aprovar('tag-escrita', `A tag ${tagDesejada} foi escrita com sucesso com o valor ${novoValor}`).devolverResposta();
+    });
 }

@@ -62,6 +62,8 @@ export class ClienteConectado extends ClienteWS {
         // Notificar quando for desconectado
         this.#socket.on('close', (codigo, razao) => {
             this.getEmissorEventos().disparaEvento('desconectado', codigo, razao);
+
+            this.#instanciaServidor.removeCliente(this.getUUID());
         })
 
         this.getComandos = () => {
@@ -78,6 +80,13 @@ export class ClienteConectado extends ClienteWS {
      */
     desconectar() {
         this.#socket.close('66666', 'Desconectado pelo servidor');
+    }
+
+    /**
+     * Retorna um ID unico dessa conexão
+     */
+    getUUID() {
+        return this.idConexaoUnico;
     }
 
     /**
