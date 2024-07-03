@@ -1,9 +1,7 @@
 import { Logger } from "../../utils/Logger.js";
 import { getLogger as LoggerEstado } from "../estado.js"
 
-import { Controller, Tag, ControllerManager, extController } from "st-ethernet-ip";
-
-const ControllerManagers = new ControllerManager();
+import { Controller, Tag, extController } from "st-ethernet-ip";
 
 let LoggerEstadoCompactLogix;
 
@@ -105,11 +103,6 @@ export class CompactLogix {
 
     estado = {
         /**
-         * Uso pra pegar eventos de alterações de todas as tags
-         * @type {extController}
-         */
-        AuxiliarCompactLogixInstancia: undefined,
-        /**
          * Instancia do Controlador do CompactLogix
          * @type {Controller}
          */
@@ -197,7 +190,7 @@ export class CompactLogix {
     constructor(ip) {
         this.configuracao.ip = ip;
 
-        this.logger = new Logger(`CompactLogix ${ip}`, { isHabilitarLogConsole: true, isHabilitaSalvamento: true, loggerPai: LoggerEstado() });
+        this.logger = new Logger(`CompactLogix ${ip}`, { isHabilitarLogConsole: true, isHabilitaSalvamento: false, loggerPai: LoggerEstado() });
     }
 
     iniciarVerificadorConexao() {
@@ -206,10 +199,10 @@ export class CompactLogix {
         }
 
         this.log(`Iniciando verificador de conexão...`);
-        this.estado.idSetIntervalVerificaConexao = setInterval(() => {
+        this.estado.idSetIntervalVerificaConexao = setInterval(async () => {
             if (!this.estado.isConectado) {
                 this.log(`CompactLogix não está conectado, tentando conectar novamente...`);
-                this.conectar();
+                await this.conectar();
             }
         }, 10000);
     }
@@ -309,32 +302,18 @@ export class CompactLogix {
         }
 
         // Se já tiver uma instancia do Controller Manager, desconectar os controllers
-        if (this.estado.AuxiliarCompactLogixInstancia != undefined) {
+        if (this.estado.CompactLogixInstancia != undefined) {
             this.log(`Desconectando instancia compact antigo...`);
-
             try {
-                await this.estado.AuxiliarCompactLogixInstancia.disconnect();
                 this.estado.CompactLogixInstancia.destroy();
-
                 this.estado.CompactLogixInstancia = undefined;
-                this.estado.AuxiliarCompactLogixInstancia = undefined;
-            } catch (ex) { }
-
+            } catch (ex) {
+                this.log(`Erro ao desconectar instancia compact antigo: ${ex}`);
+            }
         }
 
         this.log(`Instanciando um novo Controller`);
-        const controllerAdicional = ControllerManagers.addController(this.configuracao.ip);
-        this.estado.AuxiliarCompactLogixInstancia = controllerAdicional;
-
-        controllerAdicional.connect(false);
-
-        // Identificar quando qualquer tag for alterada
-        controllerAdicional.on('TagChanged', (tag, valor) => {
-            this.log(`Tag ${tag} mudou para ${valor}`);
-        })
-
-        // Instanciar o controller
-        const controller = controllerAdicional.PLC;
+        const controller = new Controller(true);
         this.estado.CompactLogixInstancia = controller;
 
         controller.on('close', () => {
@@ -367,6 +346,8 @@ export class CompactLogix {
         });
 
         try {
+            await controller.connect(this.configuracao.ip)
+
             await controller.readControllerProps();
             this.propriedades = {
                 ...this.propriedades,
@@ -387,9 +368,10 @@ export class CompactLogix {
             }
 
             // Setar o delay de procura de alteração da tag
-            controller.scan_rate = 500;
+            controller.scan_rate = 20;
 
-            this.estado.CompactLogixInstancia.scan();
+            controller.scan();
+
         } catch (ex) {
             this.log(`Erro ao conectar com o CLP: ${ex}`);
 
@@ -681,11 +663,7 @@ export class CompactLogix {
             callbackUsuario: callback
         }
 
-        let tagObservar = new Tag(tag);
-        const existeInstanciaTag = this.estado.historicoDeTags.find(tagObj => tagObj.nome == tag);
-        if (existeInstanciaTag != undefined) {
-            tagObservar = existeInstanciaTag.objetoTagEstatisticas;
-        }
+        let tagObservar = tagValorAtual.sucesso.tagLida.objetoTagEstatisticas;
 
         observadorDaTag.observadores.push(novoObservador);
 
@@ -705,8 +683,8 @@ export class CompactLogix {
 
         for (const tagObservada of this.estado.observadoresDeTags) {
             for (const observador of tagObservada.observadores) {
-                if (observador.idEscuta >= novoId) {
-                    novoId = observador.idEscuta;
+                if (observador.idEscuta >= idAtualObservador) {
+                    idAtualObservador = observador.idEscuta;
                 }
             }
         }
@@ -756,6 +734,11 @@ export class CompactLogix {
     #processarTagAlterada(tagAlterada, novoValor) {
 
         const observadoresInteressados = this.estado.observadoresDeTags.find(obs => obs.nome == tagAlterada);
+        if (observadoresInteressados == undefined) {
+            this.log(`Detectado alteração na tag ${tagAlterada} mas ela não existe nenhum observador..`);
+            return;
+        }
+
         if (observadoresInteressados.observadores.length == 0) {
             this.log(`Detectado alteração na tag ${tagAlterada} porém não há observadores cadastrados.`);
             return;

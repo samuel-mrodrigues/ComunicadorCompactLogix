@@ -3,6 +3,7 @@ import { getServidor, onClienteDesconectado } from "../../../estado/WebSocketER/
 import { Logger } from "../../../utils/Logger.js";
 import { ClienteConectado } from "../../../utils/ServidorWebSocket/Modulo Servidor/servidor/ServidorWS/ClienteWS/ClienteWS.js";
 import { copiarParaObjeto } from "../../../utils/ServidorWebSocket/Modulo Servidor/utils/utils.js";
+import { formatarDataParaString } from "../../../utils/Utils.js";
 import { getLogger } from "../CompactLogix.js"
 
 /**
@@ -115,6 +116,9 @@ function cadastraInteracaoCompactLogix() {
             },
             lerTag: {
                 tag: ''
+            },
+            observarTag: {
+                tag: ''
             }
         }
 
@@ -153,6 +157,7 @@ async function processaInteracaoLerTag(payloadCompact) {
         isSucesso: false,
         sucesso: {
             tipoLeitura: '',
+            valor: '',
             tagHistorico: {
                 nome: '',
                 valor: '',
@@ -208,6 +213,7 @@ async function processaInteracaoLerTag(payloadCompact) {
         if (isSucesso) {
             if (isExisteHistorico) {
                 retornoLeituraTag.sucesso.tipoLeitura = 'historico';
+                retornoLeituraTag.sucesso.valor = valor;
 
                 retornoLeituraTag.sucesso.tagHistorico = {
                     nome: tagDesejada,
@@ -220,6 +226,7 @@ async function processaInteracaoLerTag(payloadCompact) {
                 }
             } else {
                 retornoLeituraTag.sucesso.tipoLeitura = 'real';
+                retornoLeituraTag.sucesso.valor = valor;
 
                 retornoLeituraTag.sucesso.tagReal = {
                     nome: tagDesejada,
@@ -282,6 +289,7 @@ async function processaInteracaoLerTag(payloadCompact) {
 
     retornoLeituraTag.isSucesso = true;
     retornoLeituraTag.sucesso.tipoLeitura = 'real';
+    retornoLeituraTag.sucesso.valor = aguardaLeituraTag.sucesso.tagLida.valor;
     retornoLeituraTag.sucesso.tagReal = {
         nome: tagDesejada,
         valor: aguardaLeituraTag.sucesso.tagLida.valor,
@@ -363,8 +371,8 @@ async function processaInteracaObservarTag(cliente, payloadCompact) {
 
     const compact = getCompactLogix().find((compactObj) => compactObj.idUnico === payloadCompact.compact.id);
     if (!compact) {
-        retornoLeituraTag.erro.descricao = `CompactLogix não encontrado pelo id ${payloadCompact.compact.id}`;
-        return retornoLeituraTag;
+        retornoObserva.erro.descricao = `CompactLogix não encontrado pelo id ${payloadCompact.compact.id}`;
+        return retornoObserva;
     }
 
     const gerarObservador = await compact.observarTag(tagDesejada, (antigoValor, novoValor) => {
@@ -398,6 +406,7 @@ async function processaInteracaObservarTag(cliente, payloadCompact) {
     const idDeCanalUnico = new Date().getTime();
 
     retornoObserva.sucesso.idDeCanalObservador = idDeCanalUnico;
+    retornoObserva.isSucesso = true;
 
     LoggerComandosWS.log(`Cliente ${cliente.getUUID()} subscreveu-se na tag ${tagDesejada}.`)
 
@@ -408,6 +417,8 @@ async function processaInteracaObservarTag(cliente, payloadCompact) {
             clienteUUID: cliente.getUUID(),
             tagsObservando: []
         }
+
+        observadoresExistentes.push(jaExisteClienteObservando)
     }
 
     // Adicionar a lista de tags observadas para notifica-lo quando a tag for alterada
@@ -417,4 +428,6 @@ async function processaInteracaObservarTag(cliente, payloadCompact) {
         idCompactLogix: payloadCompact.compact.id,
         idCanalObservador: idDeCanalUnico
     })
+
+    return retornoObserva;
 }
