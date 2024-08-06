@@ -347,6 +347,7 @@ export class CompactLogix {
 
         try {
             await controller.connect(this.configuracao.ip)
+            controller.setTimeout(5000)
 
             await controller.readControllerProps();
             this.propriedades = {
@@ -368,7 +369,7 @@ export class CompactLogix {
             }
 
             // Setar o delay de procura de alteração da tag
-            controller.scan_rate = 20;
+            controller.scan_rate = 500;
 
             controller.scan();
 
@@ -652,6 +653,11 @@ export class CompactLogix {
             }
 
             this.estado.observadoresDeTags.push(observadorDaTag);
+
+            let tagObservar = tagValorAtual.sucesso.tagLida.objetoTagEstatisticas;
+
+            // Adicionar a subscrição da tag
+            this.estado.CompactLogixInstancia.subscribe(tagObservar)
         }
 
         /**
@@ -663,12 +669,8 @@ export class CompactLogix {
             callbackUsuario: callback
         }
 
-        let tagObservar = tagValorAtual.sucesso.tagLida.objetoTagEstatisticas;
 
         observadorDaTag.observadores.push(novoObservador);
-
-        // Adicionar a subscrição da tag
-        this.estado.CompactLogixInstancia.subscribe(tagObservar)
 
         retornoObservar.sucesso.idUnicoObservador = novoObservador.idEscuta;
         retornoObservar.isSucesso = true;
@@ -746,28 +748,28 @@ export class CompactLogix {
 
         this.log(`Processando alteração de tag ${tagAlterada} com o novo valor ${novoValor} para ${observadoresInteressados.observadores.length} observadores`);
 
+        let valorAnterior = undefined;
+
+        // Coletar o valor anterior antes da mudança
+        const tagAtualAlterada = this.estado.historicoDeTags.find(tag => tag.nome == tagAlterada);
+        if (tagAtualAlterada != undefined) {
+            valorAnterior = tagAtualAlterada.valor;
+
+            tagAtualAlterada.valor = novoValor;
+            tagAtualAlterada.data = new Date();
+            tagAtualAlterada.estado = {
+                ...tagAtualAlterada.estado,
+                IsJaLeuSucesso: true,
+                isTagExiste: true,
+                motivoNaoLida: {
+                    descricao: ''
+                }
+            }
+        }
+
         // Processar cada observador
         for (const observador of observadoresInteressados.observadores) {
             this.log(`Disparando observador ID ${observador.idEscuta}..`);
-
-            let valorAnterior = undefined;
-
-            // Coletar o valor anterior antes da mudança
-            const tagAtualAlterada = this.estado.historicoDeTags.find(tag => tag.nome == tagAlterada);
-            if (tagAtualAlterada != undefined) {
-                valorAnterior = tagAtualAlterada.valor;
-
-                tagAtualAlterada.valor = novoValor;
-                tagAtualAlterada.data = new Date();
-                tagAtualAlterada.estado = {
-                    ...tagAtualAlterada.estado,
-                    IsJaLeuSucesso: true,
-                    isTagExiste: true,
-                    motivoNaoLida: {
-                        descricao: ''
-                    }
-                }
-            }
 
             try {
                 observador.callbackUsuario(valorAnterior, novoValor);

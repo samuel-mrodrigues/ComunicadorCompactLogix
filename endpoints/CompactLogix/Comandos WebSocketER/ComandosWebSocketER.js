@@ -348,9 +348,9 @@ async function processaInteracaoEscreverTag(payloadCompact) {
 /**
  * Processar uma interação de observar uma tag com um payload recebido por um cliente
  * @param {ComandoCompactsWebSocketER} payloadCompact - Payload enviado com as informações da tag para observar
- * @param {ClienteConectado} cliente - Instancia da conexão do cliente que solicitou a observação
+ * @param {ClienteConectado} clienteConexao - Instancia da conexão do cliente que solicitou a observação
  */
-async function processaInteracaObservarTag(cliente, payloadCompact) {
+async function processaInteracaObservarTag(clienteConexao, payloadCompact) {
     const retornoObserva = {
         /**
          * Se a observação foi feita com sucesso
@@ -377,25 +377,24 @@ async function processaInteracaObservarTag(cliente, payloadCompact) {
 
     const gerarObservador = await compact.observarTag(tagDesejada, (antigoValor, novoValor) => {
 
-        const clientesInteressados = observadoresExistentes.filter(clienteObj => clienteObj.tagsObservando.find(tagObj => tagObj.tag === tagDesejada));
-        if (clientesInteressados.length == 0) return;
+        // Achar o cliente interessado na interação da tag
+        let clienteInteressado = observadoresExistentes.find(clienteObj => clienteObj.clienteUUID === clienteConexao.getUUID());
 
-        LoggerComandosWS.log(`Notificando ${clientesInteressados.length} clientes sobre a alteração da tag ${tagDesejada}`);
+        if (clienteInteressado == undefined) return;
 
-        for (const cliente of clientesInteressados) {
+        // Filtrar a pela tag que foi alterada e ele se interessou
+        const tagInteressada = clienteInteressado.tagsObservando.find(tagObj => tagObj.tag === tagDesejada);
+        if (tagInteressada == undefined) return;
 
-            const informacoesDaSubscricaoTag = cliente.tagsObservando.find(tagObj => tagObj.tag === tagDesejada);
-            if (informacoesDaSubscricaoTag == undefined) continue;
+        // Obter a conexão do WebSocket
+        const instanciaConexao = getServidor().getClientesConectados().find(clienteConectado => clienteConectado.getUUID() === clienteConexao.getUUID());
+        if (instanciaConexao == undefined) return;
 
-            const conexaoCliente = getServidor().getClientesConectados().find(clienteConectado => clienteConectado.getUUID() === cliente.clienteUUID);
-            if (conexaoCliente == undefined) continue;
-
-            LoggerComandosWS.log(`Notificando o cliente ${cliente.clienteUUID} sobre a alteração da tag ${tagDesejada}`);
-            conexaoCliente.enviarComando(`interagir_compact_logix-tag-alterada-${informacoesDaSubscricaoTag.idCanalObservador}`, {
-                anterior: antigoValor,
-                novo: novoValor
-            })
-        }
+        LoggerComandosWS.log(`Notificando o cliente ${clienteConexao.getUUID()} sobre a alteração da tag ${tagDesejada}`);
+        instanciaConexao.enviarComando(`interagir_compact_logix-tag-alterada-${tagInteressada.idCanalObservador}`, {
+            anterior: antigoValor,
+            novo: novoValor
+        })
     });
 
     if (!gerarObservador.isSucesso) {
@@ -408,13 +407,13 @@ async function processaInteracaObservarTag(cliente, payloadCompact) {
     retornoObserva.sucesso.idDeCanalObservador = idDeCanalUnico;
     retornoObserva.isSucesso = true;
 
-    LoggerComandosWS.log(`Cliente ${cliente.getUUID()} subscreveu-se na tag ${tagDesejada}.`)
+    LoggerComandosWS.log(`Cliente ${clienteConexao.getUUID()} subscreveu-se na tag ${tagDesejada}.`)
 
     // Se o o cliente ainda não estiver observando, será adicionado
-    let jaExisteClienteObservando = observadoresExistentes.find(clienteObj => clienteObj.clienteUUID === cliente.getUUID());
+    let jaExisteClienteObservando = observadoresExistentes.find(clienteObj => clienteObj.clienteUUID === clienteConexao.getUUID());
     if (jaExisteClienteObservando == undefined) {
         jaExisteClienteObservando = {
-            clienteUUID: cliente.getUUID(),
+            clienteUUID: clienteConexao.getUUID(),
             tagsObservando: []
         }
 
