@@ -360,7 +360,11 @@ async function processaInteracaObservarTag(clienteConexao, payloadCompact) {
             /**
              * O cliente deve abrir um comando com esse nome para receber os eventos de observação
              */
-            idDeCanalObservador: ''
+            idDeCanalObservador: '',
+            /**
+             * O valor atual da tag
+             */
+            valorTagAtual: -1
         },
         erro: {
             descricao: ''
@@ -405,6 +409,11 @@ async function processaInteracaObservarTag(clienteConexao, payloadCompact) {
     const idDeCanalUnico = new Date().getTime();
 
     retornoObserva.sucesso.idDeCanalObservador = idDeCanalUnico;
+
+    // Obter o valor atual da tag pra retornar também
+    const tagLidaHistorico = compact.estado.historicoDeTags.find(tagObj => tagObj.nome === tagDesejada);
+    
+    retornoObserva.sucesso.valorTagAtual = tagLidaHistorico.valor
     retornoObserva.isSucesso = true;
 
     LoggerComandosWS.log(`Cliente ${clienteConexao.getUUID()} subscreveu-se na tag ${tagDesejada}.`)

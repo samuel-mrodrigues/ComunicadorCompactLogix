@@ -313,7 +313,7 @@ export class CompactLogix {
         }
 
         this.log(`Instanciando um novo Controller`);
-        const controller = new Controller(true);
+        const controller = new Controller(false);
         this.estado.CompactLogixInstancia = controller;
 
         controller.on('close', () => {
@@ -348,7 +348,7 @@ export class CompactLogix {
         try {
             await controller.connect(this.configuracao.ip)
             controller.setTimeout(5000)
-
+            
             await controller.readControllerProps();
             this.propriedades = {
                 ...this.propriedades,
@@ -389,6 +389,16 @@ export class CompactLogix {
             this.estado.motivoNaoConectado.isConectando = false;
 
             retornoConexao.erro.descricao = ex.message;
+        }
+
+        // Se tiver alguns observadores existentes, eu preciso reler as tags para os eventos onChanges serem disparados
+        if (this.estado.observadoresDeTags.length > 0) {
+
+            this.log(`Re-lendo todas as tags para disparar os eventos de alteração...`);
+            for (const tag of this.estado.historicoDeTags) {
+                this.log(`Re-lendo tag ${tag.nome}...`);
+                await this.lerTag(tag.nome);
+            }
         }
 
         return retornoConexao;
