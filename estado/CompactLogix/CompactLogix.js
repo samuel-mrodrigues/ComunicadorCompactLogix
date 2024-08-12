@@ -1,4 +1,5 @@
 import { Logger } from "../../utils/Logger.js";
+import { pausar } from "../../utils/ServidorWebSocket/Modulo Servidor/utils/EmissorDeEvento.js";
 import { getLogger as LoggerEstado } from "../estado.js"
 
 import { Controller, Tag, extController } from "st-ethernet-ip";
@@ -161,6 +162,8 @@ export class CompactLogix {
         historicoDeTags: []
     }
 
+    isDesconectouJa = false;
+
     /**
      * Informações do CompactLogix(só é preenchido quando é conectado)
      */
@@ -301,54 +304,61 @@ export class CompactLogix {
             isConectando: true
         }
 
-        // Se já tiver uma instancia do Controller Manager, desconectar os controllers
-        if (this.estado.CompactLogixInstancia != undefined) {
-            this.log(`Desconectando instancia compact antigo...`);
-            try {
-                this.estado.CompactLogixInstancia.destroy();
-                this.estado.CompactLogixInstancia = undefined;
-            } catch (ex) {
-                this.log(`Erro ao desconectar instancia compact antigo: ${ex}`);
-            }
+        // // Se já tiver uma instancia do Controller Manager, desconectar os controllers
+        // if (this.estado.CompactLogixInstancia != undefined) {
+        //     this.log(`Desconectando instancia compact antigo...`);
+        //     try {
+        //         this.estado.CompactLogixInstancia.destroy();
+        //         this.estado.CompactLogixInstancia = undefined;
+        //     } catch (ex) {
+        //         this.log(`Erro ao desconectar instancia compact antigo: ${ex}`);
+        //     }
+        // }
+
+        if (this.estado.CompactLogixInstancia == undefined) {
+            this.log(`Instanciando um novo Controller`);
+            this.estado.CompactLogixInstancia = new Controller(false);
+
+            this.estado.CompactLogixInstancia.on('close', () => {
+                this.log('Evento detectado: A conexão foi fechada.');
+                this.estado.isConectado = false;
+            });
+
+            this.estado.CompactLogixInstancia.on('data', (data) => {
+                // this.log(`Evento detectado: Novos dados recebidos: ${data.toString()}`);
+            })
+
+            this.estado.CompactLogixInstancia.on('error', (err) => {
+                this.log(`Evento detectado: Erro ocorrido: ${JSON.stringify(err)}`);
+            });
+
+            this.estado.CompactLogixInstancia.on('ready', async () => {
+                this.log('Evento detectado: Pronto');
+            });
+
+            this.estado.CompactLogixInstancia.on('connect', () => {
+                this.log(`Evento detectado: Conectado`);
+            });
+
+            this.estado.CompactLogixInstancia.on('timeout', () => {
+                this.log('Evento detectado: Timeout');
+            })
+
+            this.estado.CompactLogixInstancia.on('end', () => {
+                this.log('Evento detectado: Fim de conexão');
+            });
+        } else {
+            this.log(`Reutilizando instancia do Controller`);
         }
+        const controller = this.estado.CompactLogixInstancia
 
-        this.log(`Instanciando um novo Controller`);
-        const controller = new Controller(false);
-        this.estado.CompactLogixInstancia = controller;
-
-        controller.on('close', () => {
-            this.log('Evento detectado: A conexão foi fechada.');
-            this.estado.isConectado = false;
-        });
-
-        controller.on('data', (data) => {
-            // this.log(`Evento detectado: Novos dados recebidos: ${data.toString()}`);
-        })
-
-        controller.on('error', (err) => {
-            this.log(`Evento detectado: Erro ocorrido: ${JSON.stringify(err)}`);
-        });
-
-        controller.on('ready', async () => {
-            this.log('Evento detectado: Pronto');
-        });
-
-        controller.on('connect', () => {
-            this.log(`Evento detectado: Conectado`);
-        });
-
-        controller.on('timeout', () => {
-            this.log('Evento detectado: Timeout');
-        })
-
-        controller.on('end', () => {
-            this.log('Evento detectado: Fim de conexão');
-        });
-
+        this.log(`Abrindo conexão com o endereço Compact...`)
         try {
             await controller.connect(this.configuracao.ip)
+            this.estado.isConectado = true;
             controller.setTimeout(5000)
-            
+
+            this.log(`Conectado com sucesso ao CompactLogix. Lendo informações do controlador...`);
             await controller.readControllerProps();
             this.propriedades = {
                 ...this.propriedades,
@@ -357,7 +367,8 @@ export class CompactLogix {
                 slot: controller.properties.slot,
                 versao: controller.properties.version
             }
-            this.estado.isConectado = true;
+
+            this.log(`Informações do controlador lidas com sucesso: ${JSON.stringify(this.propriedades)}`);
 
             this.estado.motivoNaoConectado = {
                 ...this.estado.motivoNaoConectado,
@@ -370,8 +381,9 @@ export class CompactLogix {
 
             // Setar o delay de procura de alteração da tag
             controller.scan_rate = 500;
-
+            
             controller.scan();
+            this.log(`Scan rate setado para 500ms`);
 
         } catch (ex) {
             this.log(`Erro ao conectar com o CLP: ${ex}`);
@@ -394,11 +406,14 @@ export class CompactLogix {
         // Se tiver alguns observadores existentes, eu preciso reler as tags para os eventos onChanges serem disparados
         if (this.estado.observadoresDeTags.length > 0) {
 
-            this.log(`Re-lendo todas as tags para disparar os eventos de alteração...`);
+            this.log(`Re-lendo todas as ${this.estado.observadoresDeTags.length} tags para disparar os eventos de alteração...`);
             for (const tag of this.estado.historicoDeTags) {
                 this.log(`Re-lendo tag ${tag.nome}...`);
                 await this.lerTag(tag.nome);
+                await pausar(700)
             }
+        } else {
+            this.log(`Não há observadores de tags cadastrados, não é necessário re-lê-las.`);
         }
 
         return retornoConexao;
