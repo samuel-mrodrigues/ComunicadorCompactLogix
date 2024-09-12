@@ -42,6 +42,18 @@ function cadastrarCompactFundicao() {
     compactLogixs.push(novoCompact);
 
     LoggerEstadoCompactLogix.log(`CompactLogix Fundição cadastrado com sucesso.`);
+
+    // setTimeout(async () => {
+    //     console.log(`Legal em bro`);
+
+    //     let teste = novoCompact.estado.CompactLogixInstancia.tagList
+
+    //     console.log(teste.filter(tag => tag.name.startsWith('BD_G1_')));
+
+    // }, 3000);
+    setTimeout(() => {
+        novoCompact.desconectar();
+    }, 20000);
 }
 
 /**
@@ -193,7 +205,7 @@ export class CompactLogix {
     constructor(ip) {
         this.configuracao.ip = ip;
 
-        this.logger = new Logger(`CompactLogix ${ip}`, { isHabilitarLogConsole: true, isHabilitaSalvamento: false, loggerPai: LoggerEstado() });
+        this.logger = new Logger(`CompactLogix ${ip}`, { isHabilitarLogConsole: true, isHabilitaSalvamento: true, loggerPai: LoggerEstado() });
     }
 
     iniciarVerificadorConexao() {
@@ -305,15 +317,15 @@ export class CompactLogix {
         }
 
         // // Se já tiver uma instancia do Controller Manager, desconectar os controllers
-        // if (this.estado.CompactLogixInstancia != undefined) {
-        //     this.log(`Desconectando instancia compact antigo...`);
-        //     try {
-        //         this.estado.CompactLogixInstancia.destroy();
-        //         this.estado.CompactLogixInstancia = undefined;
-        //     } catch (ex) {
-        //         this.log(`Erro ao desconectar instancia compact antigo: ${ex}`);
-        //     }
-        // }
+        if (this.estado.CompactLogixInstancia != undefined) {
+            this.log(`Desconectando instancia compact antigo...`);
+            try {
+                this.estado.CompactLogixInstancia.destroy();
+                this.estado.CompactLogixInstancia = undefined;
+            } catch (ex) {
+                this.log(`Erro ao desconectar instancia compact antigo: ${ex}`);
+            }
+        }
 
         if (this.estado.CompactLogixInstancia == undefined) {
             this.log(`Instanciando um novo Controller`);
@@ -355,7 +367,6 @@ export class CompactLogix {
         this.log(`Abrindo conexão com o endereço Compact...`)
         try {
             await controller.connect(this.configuracao.ip)
-            this.estado.isConectado = true;
             controller.setTimeout(5000)
 
             this.log(`Conectado com sucesso ao CompactLogix. Lendo informações do controlador...`);
@@ -370,6 +381,8 @@ export class CompactLogix {
 
             this.log(`Informações do controlador lidas com sucesso: ${JSON.stringify(this.propriedades)}`);
 
+            this.estado.isConectado = true;
+
             this.estado.motivoNaoConectado = {
                 ...this.estado.motivoNaoConectado,
                 descricao: '',
@@ -381,7 +394,7 @@ export class CompactLogix {
 
             // Setar o delay de procura de alteração da tag
             controller.scan_rate = 500;
-            
+
             controller.scan();
             this.log(`Scan rate setado para 500ms`);
 
@@ -406,12 +419,7 @@ export class CompactLogix {
         // Se tiver alguns observadores existentes, eu preciso reler as tags para os eventos onChanges serem disparados
         if (this.estado.observadoresDeTags.length > 0) {
 
-            this.log(`Re-lendo todas as ${this.estado.observadoresDeTags.length} tags para disparar os eventos de alteração...`);
-            for (const tag of this.estado.historicoDeTags) {
-                this.log(`Re-lendo tag ${tag.nome}...`);
-                await this.lerTag(tag.nome);
-                await pausar(700)
-            }
+            this.#recadastrarObservadores();
         } else {
             this.log(`Não há observadores de tags cadastrados, não é necessário re-lê-las.`);
         }
@@ -452,19 +460,26 @@ export class CompactLogix {
         }
 
         // Se não estiver conectado não permitir a leitura
-        if (!this.estado.isConectado) {
-            this.log(`Não foi possível ler a tag ${tag} pois o CompactLogix não está conectado.`);
+        // if (!this.estado.isConectado) {
+        //     this.log(`Não foi possível ler a tag ${tag} pois o CompactLogix não está conectado.`);
 
-            retornoLeitura.erro.descricao = 'CompactLogix não está conectado.';
-            retornoLeitura.erro.isCompactNaoConectado = true;
-            return retornoLeitura;
-        }
+        //     retornoLeitura.erro.descricao = 'CompactLogix não está conectado.';
+        //     retornoLeitura.erro.isCompactNaoConectado = true;
+        //     return retornoLeitura;
+        // }
 
         this.log(`Lendo tag: ${tag}`);
 
         let historicoLeituraTag = this.estado.historicoDeTags.find(tagObj => tagObj.nome == tag);
         if (historicoLeituraTag == undefined) {
             // Se a tag ainda não existir no cache, adicionar ela
+
+            if (!this.estado.isConectado) {
+                this.log(`CompactLogix não está conectado, não é possível adicionar a tag ${tag} ao cache de leitura.`);
+                retornoLeitura.erro.descricao = 'CompactLogix não está conectado e não há historico de leitura para essa tag solicitada.';
+                retornoLeitura.erro.isCompactNaoConectado = true;
+                return retornoLeitura;
+            }
 
             historicoLeituraTag = {
                 nome: tag,
@@ -630,6 +645,13 @@ export class CompactLogix {
     }
 
     /**
+     * Solicitar a desconexão do Compact
+     */
+    async desconectar() {
+        this.estado.CompactLogixInstancia.destroy();
+    }
+
+    /**
      * Observar por alterações em uma tag
      * @param {String} tag - Código da tag a ser observada
      * @param {CallbackTagAlterouValor} callback - Callback a ser executado quando a tag for alterada
@@ -693,7 +715,6 @@ export class CompactLogix {
             idEscuta: this.#getProximoIdObservador(),
             callbackUsuario: callback
         }
-
 
         observadorDaTag.observadores.push(novoObservador);
 
@@ -808,10 +829,28 @@ export class CompactLogix {
     }
 
     /**
+     * Recadastra todos os observadores atuais novamente
+     */
+    async #recadastrarObservadores() {
+        this.log(`Recadastrando todos os observadores...`);
+
+        // Passar por cada observador existente e solicitar o recadastro dela no subscribe
+
+        for (const tagObservada of this.estado.observadoresDeTags) {
+            this.log(`Recadastrando subscribe da tag ${tagObservada.nome}...`);
+
+            let statusLeituraTag = await this.lerTag(tagObservada.nome);
+            if (statusLeituraTag.isSucesso) {
+                this.estado.CompactLogixInstancia.subscribe(statusLeituraTag.sucesso.tagLida.objetoTagEstatisticas);
+            }
+        }
+    }
+
+    /**
      * Escrever um log desse store
      * @param {String} msg - String ou objeto para mostrar no console
      */
-    log(msg, isExibirCoonsole = true) {
+    log(msg) {
         let conteudoMsg = ''
         if (typeof msg == 'object') {
             conteudoMsg = JSON.stringify(msg, null, 4);
@@ -819,8 +858,6 @@ export class CompactLogix {
             conteudoMsg = msg;
         }
 
-        this.logger.log(`[CompactLogix ${this.configuracao.ip}] ${conteudoMsg}`, {
-            mostrarNoConsole: isExibirCoonsole
-        })
+        this.logger.log(`[CompactLogix ${this.configuracao.ip}] ${conteudoMsg}`)
     }
 }   
