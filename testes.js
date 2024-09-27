@@ -1,8 +1,13 @@
-import { Controller, Tag, ControllerManager } from "st-ethernet-ip"
+// import { Controller, Tag, ControllerManager } from "st-ethernet-ip"
+
+import { Controller } from "ethernet-ip"
 
 import NodeDrivers from "node-drivers";
 import Logix5000 from "node-drivers/src/layers/cip/layers/Logix5000/index.js";
 import TCPLayer from "node-drivers/src/layers/tcp/index.js";
+
+import ModbusCliente from "jsmodbus"
+import net from "net"
 
 async function iniciar() {
     console.log(`Iniciando testes`);
@@ -121,4 +126,99 @@ async function iniciar2() {
     }
 }
 
-iniciar2();
+async function iniciar3() {
+    console.log(`Iniciando teste...`);
+
+    const hdmiTeste = new Controller(false);
+
+    hdmiTeste.on('close', () => {
+        console.log('Evento detectado: A conexão foi fechada.');
+        this.estado.isConectado = false;
+    });
+
+    hdmiTeste.on('data', (data) => {
+        // console.log(`Evento detectado: Novos dados recebidos: ${data.toString()}`);
+    })
+
+    hdmiTeste.on('error', (err) => {
+        console.log(`Evento detectado: Erro ocorrido: ${JSON.stringify(err)}`);
+    });
+
+    hdmiTeste.on('ready', async () => {
+        console.log('Evento detectado: Pronto');
+    });
+
+    hdmiTeste.on('connect', () => {
+        console.log(`Evento detectado: Conectado`);
+    });
+
+    hdmiTeste.on('timeout', () => {
+        console.log('Evento detectado: Timeout');
+    })
+
+    hdmiTeste.on('end', () => {
+        console.log('Evento detectado: Fim de conexão');
+    });
+
+    hdmiTeste.connect('192.168.3.119');
+
+}
+
+function iniciar4() {
+    console.log(`Iniciando teste 4...`);
+
+    // Criar cliente TCP
+    const socket = new net.Socket();
+    const client = new ModbusCliente.client.TCP(socket);
+
+    socket.connect({ host: '192.168.3.119', port: 502 }, () => {
+        console.log(`Conectado ao MicroLogix`);
+
+        // client.readHoldingRegisters(0, 2).then((resposta) => {
+        //     console.log(resposta.response._body.valuesAsArray);
+        //     // console.log(resposta);
+
+        // }).catch((ex) => {
+        //     console.log(`Erro ao ler registradores`);
+        //     console.log(ex);
+
+        // });
+
+        client.writeSingleRegister(0, 33).then((resposta) => {
+            console.log(resposta);
+        }).catch((ex) => {
+            console.log(`Erro ao escrever registrador`);
+            console.log(ex);
+        })
+
+        // client.readCoils(1, 1).then((resposta) => {
+        //     console.log(resposta);
+        // }).catch((ex) => {
+        //     console.log(`Erro ao ler coils`);
+        //     console.log(ex);
+        // });
+    });
+}
+
+function iniciar5() {
+
+    // Criar um controlador
+    const PLC = new Controller();
+
+    // Definir o endereço IP do PLC
+    PLC.connect('192.168.3.119').then(() => {
+        console.log("Conectado ao PLC");
+
+        // // Ler dados de uma tag
+        // PLC.readTag('N7:0').then(tag => {
+        //     console.log(`Valor da tag N7:0: ${tag.value}`);
+        // }).catch(err => console.log(err));
+
+        // // Escrever um valor para uma tag
+        // PLC.writeTag('N7:0', 42).then(() => {
+        //     console.log("Escreveu 42 em N7:0");
+        // }).catch(err => console.log(err));
+    });
+}
+
+iniciar5();

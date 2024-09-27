@@ -11,7 +11,9 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "ethernet-ip": "^1.2.5",
     "express": "^4.19.2",
+    "jsmodbus": "^4.0.10",
     "node-drivers": "^2.0.2",
     "st-ethernet-ip": "^2.7.3",
     "uuid": "^10.0.0",

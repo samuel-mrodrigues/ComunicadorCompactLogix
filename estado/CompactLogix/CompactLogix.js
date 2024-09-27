@@ -2,7 +2,7 @@ import { Logger } from "../../utils/Logger.js";
 import { pausar } from "../../utils/ServidorWebSocket/Modulo Servidor/utils/EmissorDeEvento.js";
 import { getLogger as LoggerEstado } from "../estado.js"
 
-import { Controller, Tag, extController } from "st-ethernet-ip";
+import { Controller, Structure, Tag, TagList, extController } from "st-ethernet-ip";
 
 let LoggerEstadoCompactLogix;
 
@@ -31,7 +31,7 @@ export function getCompactLogix() {
 }
 
 function cadastrarCompactFundicao() {
-    const novoCompact = new CompactLogix('192.168.3.120');
+    const novoCompact = new CompactLogix('192.168.3.118');
 
     novoCompact.idUnico = 'compactfundicao'
     novoCompact.conectar();
@@ -43,17 +43,44 @@ function cadastrarCompactFundicao() {
 
     LoggerEstadoCompactLogix.log(`CompactLogix Fundição cadastrado com sucesso.`);
 
-    // setTimeout(async () => {
-    //     console.log(`Legal em bro`);
+    setTimeout(async () => {
+        console.log(`Iniciando a observação de tag...`);
 
-    //     let teste = novoCompact.estado.CompactLogixInstancia.tagList
 
-    //     console.log(teste.filter(tag => tag.name.startsWith('BD_G1_')));
+        // const tagString = new Structure('BD_G1_LIGADA', novoCompact.estado.tagLista.tags)''
+        // await novoCompact.estado.CompactLogixInstancia.readTag(tagString);
 
-    // }, 3000);
-    setTimeout(() => {
-        novoCompact.desconectar();
-    }, 20000);
+        // console.log(tagString);
+
+
+        // const tagLista = new TagList();
+
+        // await novoCompact.estado.CompactLogixInstancia.getControllerTagList(tagLista);
+
+        // const tagString = new Structure('BD_G5_NOME_OPERADOR', tagLista)
+        // await novoCompact.estado.CompactLogixInstancia.readTag(tagString);
+
+
+        // console.log(`O valor atual é ${tagString.value}`);
+
+        // tagString.value = 'cacete irmao';
+
+        // await novoCompact.estado.CompactLogixInstancia.writeTag(tagString);
+
+        // const tagTeste = new Tag('BD_G5_NOME_OPERADOR');
+        // let teste = await novoCompact.estado.CompactLogixInstancia.readTag(tagTeste);
+
+        // console.log(tagTeste);
+
+
+        // tagTeste.value = 'cacete irmao';
+
+        // await novoCompact.estado.CompactLogixInstancia.writeTag(tagTeste);
+
+    }, 15000);
+    // setTimeout(() => {
+    //     novoCompact.desconectar();
+    // }, 20000);
 }
 
 /**
@@ -120,6 +147,27 @@ export class CompactLogix {
          * @type {Controller}
          */
         CompactLogixInstancia: undefined,
+        /**
+         * Detalhes das propriedades de todas as tags do CompactLogix
+         */
+        tagLista: {
+            /**
+             * Tags existentes e suas propriedades
+            */
+            tags: new TagList(),
+            /**
+             * Se a lista de tags foi carregada com sucesso pela última vez
+             */
+            isCarregado: false,
+            /**
+             * Se a lista de tags está sendo atualmente carregada
+             */
+            isCarregando: false,
+            /**
+             * ID do setInterval que fica atualizando a lista de tags
+             */
+            idSetIntervalAtualizando: -1
+        },
         /**
          * Se atualmente o CompactLogix esta conectadoF
          */
@@ -322,6 +370,8 @@ export class CompactLogix {
             try {
                 this.estado.CompactLogixInstancia.destroy();
                 this.estado.CompactLogixInstancia = undefined;
+                clearInterval(this.estado.tagLista.idSetIntervalAtualizando);
+                this.estado.tagLista.isCarregado = false;
             } catch (ex) {
                 this.log(`Erro ao desconectar instancia compact antigo: ${ex}`);
             }
@@ -359,8 +409,6 @@ export class CompactLogix {
             this.estado.CompactLogixInstancia.on('end', () => {
                 this.log('Evento detectado: Fim de conexão');
             });
-        } else {
-            this.log(`Reutilizando instancia do Controller`);
         }
         const controller = this.estado.CompactLogixInstancia
 
@@ -380,6 +428,36 @@ export class CompactLogix {
             }
 
             this.log(`Informações do controlador lidas com sucesso: ${JSON.stringify(this.propriedades)}`);
+
+            this.log(`Lendo informações de todas as tags e suas propriedades...`);
+
+            try {
+                let statusLeTags = await controller.getControllerTagList(this.estado.tagLista.tags);
+                this.log(`Informações de todas as tags lidas com sucesso. Foram recebidas ${statusLeTags.length} tags`);
+
+                this.estado.tagLista.isCarregado = true;
+            } catch (ex) {
+                this.log(`Erro ao tentar ler informações de todas as tags: ${ex}`);
+            }
+
+            // Iniciar o atualizador automatico da lista de tags
+            this.estado.tagLista.idSetIntervalAtualizando = setInterval(async () => {
+                this.estado.tagLista.isCarregando = true;
+                this.log(`Iniciando autalização automatica das tags existentes...`);
+
+                try {
+                    let statusLeTags = await controller.getControllerTagList(this.estado.tagLista.tags);
+                    this.log(`Informações de todas as tags lidas com sucesso. Foram recebidas ${statusLeTags.length} tags`);
+
+                    this.estado.tagLista.isCarregado = true;
+                } catch (ex) {
+                    this.log(`Erro ao tentar ler informações de todas as tags: ${ex}`);
+                }
+
+                this.estado.tagLista.isCarregando = false;
+                this.log(`Atualização periodica de tags realizada com sucesso.`);
+            }, 1 * (60 * 1000))
+
 
             this.estado.isConectado = true;
 
@@ -496,7 +574,10 @@ export class CompactLogix {
                 },
             }
 
+            // Verificar se vou precisar instanciar a Tag ou Structured Tag
             const novaTag = new Tag(tag)
+
+            // const novaStructuredTag = new Structure('xablau');
 
             novaTag.on('Changed', (valor) => {
                 this.log(`Tag ${tag} ocorreu o evento Changed com o valor: ${valor.value}}`);
@@ -526,8 +607,18 @@ export class CompactLogix {
             // Se leu com sucesso
             historicoLeituraTag.data = new Date();
 
+            let valorTag = undefined;
+
+        
+            // Se a tag for uma stringm aplicar uma formtação diferente no valor da tag
+            if (historicoLeituraTag.objetoTagEstatisticas.state.tag.type == 672) {
+                valorTag = historicoLeituraTag.objetoTagEstatisticas.value.toString().substring(4, 99).replace(/\u0000/g, '');
+            } else {
+                valorTag = historicoLeituraTag.objetoTagEstatisticas.value;
+            }
+
             // Atualizar com o novo valor
-            historicoLeituraTag.valor = historicoLeituraTag.objetoTagEstatisticas.value;
+                historicoLeituraTag.valor = valorTag;
 
             historicoLeituraTag.estado = {
                 ...historicoLeituraTag.estado,
@@ -539,7 +630,7 @@ export class CompactLogix {
                 }
             }
 
-            historicoLeituraTag.valor = historicoLeituraTag.objetoTagEstatisticas.value;
+            historicoLeituraTag.valor = valorTag;
         } catch (ex) {
             if (typeof ex == "object") {
 
@@ -628,8 +719,20 @@ export class CompactLogix {
         }
 
         try {
-            await this.estado.CompactLogixInstancia.writeTag(lerTagAtual.sucesso.tagLida.objetoTagEstatisticas, valor);
+            // Preparar para escrever a tag
 
+            // Se a tag for do tipo estruturada, usar a instancia de classe estruturada para escrever a tag
+            if (lerTagAtual.sucesso.tagLida.objetoTagEstatisticas.state.tag.type == 672) {
+                const tagEstruturada = new Structure(tag, this.estado.tagLista.tags);
+                await this.estado.CompactLogixInstancia.readTag(tagEstruturada);
+
+                tagEstruturada.value = valor
+
+                await this.estado.CompactLogixInstancia.writeTag(tagEstruturada);
+            } else {
+                await this.estado.CompactLogixInstancia.writeTag(lerTagAtual.sucesso.tagLida.objetoTagEstatisticas, valor);
+            }
+            
             retornoSetarTag.isSucesso = true
         } catch (ex) {
             if (ex.message.toLowerCase().includes('timeout')) {
