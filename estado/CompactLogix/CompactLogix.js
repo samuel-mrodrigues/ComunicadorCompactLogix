@@ -31,7 +31,7 @@ export function getCompactLogix() {
 }
 
 function cadastrarCompactFundicao() {
-    const novoCompact = new CompactLogix('192.168.3.118');
+    const novoCompact = new CompactLogix('192.168.3.120');
 
     novoCompact.idUnico = 'compactfundicao'
     novoCompact.conectar();
@@ -46,12 +46,14 @@ function cadastrarCompactFundicao() {
     setTimeout(async () => {
         console.log(`Iniciando a observação de tag...`);
 
+        const lerTagsGevitec1 = novoCompact.estado.CompactLogixInstancia.tagList;
 
+        console.log(lerTagsGevitec1);
+        
         // const tagString = new Structure('BD_G1_LIGADA', novoCompact.estado.tagLista.tags)''
         // await novoCompact.estado.CompactLogixInstancia.readTag(tagString);
 
         // console.log(tagString);
-
 
         // const tagLista = new TagList();
 
@@ -77,7 +79,7 @@ function cadastrarCompactFundicao() {
 
         // await novoCompact.estado.CompactLogixInstancia.writeTag(tagTeste);
 
-    }, 15000);
+    }, 10000);
     // setTimeout(() => {
     //     novoCompact.desconectar();
     // }, 20000);
@@ -609,7 +611,7 @@ export class CompactLogix {
 
             let valorTag = undefined;
 
-        
+
             // Se a tag for uma stringm aplicar uma formtação diferente no valor da tag
             if (historicoLeituraTag.objetoTagEstatisticas.state.tag.type == 672) {
                 valorTag = historicoLeituraTag.objetoTagEstatisticas.value.toString().substring(4, 99).replace(/\u0000/g, '');
@@ -618,7 +620,7 @@ export class CompactLogix {
             }
 
             // Atualizar com o novo valor
-                historicoLeituraTag.valor = valorTag;
+            historicoLeituraTag.valor = valorTag;
 
             historicoLeituraTag.estado = {
                 ...historicoLeituraTag.estado,
@@ -732,7 +734,7 @@ export class CompactLogix {
             } else {
                 await this.estado.CompactLogixInstancia.writeTag(lerTagAtual.sucesso.tagLida.objetoTagEstatisticas, valor);
             }
-            
+
             retornoSetarTag.isSucesso = true
         } catch (ex) {
             if (ex.message.toLowerCase().includes('timeout')) {

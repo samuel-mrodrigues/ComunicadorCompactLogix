@@ -7,11 +7,19 @@
         {
             "type": "node",
             "request": "launch",
-            "name": "Launch Program",
+            "name": "Arquivo Atual",
             "skipFiles": [
                 "<node_internals>/**"
             ],
             "program": "${workspaceFolder}\\${file}"
+        }, {
+            "type": "node",
+            "request": "launch",
+            "name": "Programa Inteiro",
+            "skipFiles": [
+                "<node_internals>/**"
+            ],
+            "program": "${workspaceFolder}\\index.js"
         }
     ]
 }
