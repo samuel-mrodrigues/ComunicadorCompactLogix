@@ -2,7 +2,7 @@ import { Logger } from "../../utils/Logger.js";
 import { pausar } from "../../utils/ServidorWebSocket/Modulo Servidor/utils/EmissorDeEvento.js";
 import { getLogger as LoggerEstado } from "../estado.js"
 
-import { Controller, Structure, Tag, TagList, extController } from "st-ethernet-ip";
+import { Controller, Structure, Tag, TagList, extController, EthernetIP } from "st-ethernet-ip";
 
 let LoggerEstadoCompactLogix;
 
@@ -31,55 +31,63 @@ export function getCompactLogix() {
 }
 
 function cadastrarCompactFundicao() {
+    return;
+    // const novoCompact = new CompactLogix('192.168.3.120');
     const novoCompact = new CompactLogix('192.168.3.120');
 
     novoCompact.idUnico = 'compactfundicao'
     novoCompact.conectar();
-    novoCompact.iniciarVerificadorConexao();
-    novoCompact.togglePing(true);
-    novoCompact.togglePingsConsole(false);
+    // novoCompact.iniciarVerificadorConexao();
+    // novoCompact.togglePing(true);
+    // novoCompact.togglePingsConsole(true);
 
     compactLogixs.push(novoCompact);
 
     LoggerEstadoCompactLogix.log(`CompactLogix Fundição cadastrado com sucesso.`);
 
-    setTimeout(async () => {
-        console.log(`Iniciando a observação de tag...`);
+    // setTimeout(async () => {
+    // console.log(`Iniciando a observação de tag...`);
 
-        const lerTagsGevitec1 = novoCompact.estado.CompactLogixInstancia.tagList;
+    // let tags = await novoCompact.estado.CompactLogixInstancia.read
 
-        console.log(lerTagsGevitec1);
-        
-        // const tagString = new Structure('BD_G1_LIGADA', novoCompact.estado.tagLista.tags)''
-        // await novoCompact.estado.CompactLogixInstancia.readTag(tagString);
+    // const lerTagsGevitec1 = novoCompact.estado.CompactLogixInstancia.tagList;
 
-        // console.log(tagString);
+    // console.log(lerTagsGevitec1);
 
-        // const tagLista = new TagList();
+    // const tagString = new Structure('BD_G1_LIGADA', novoCompact.estado.tagLista.tags)''
+    // await novoCompact.estado.CompactLogixInstancia.readTag(tagString);
 
-        // await novoCompact.estado.CompactLogixInstancia.getControllerTagList(tagLista);
+    // console.log(tagString);
 
-        // const tagString = new Structure('BD_G5_NOME_OPERADOR', tagLista)
-        // await novoCompact.estado.CompactLogixInstancia.readTag(tagString);
+    // const tagLista = new TagList();
 
+    // console.log(`Obtendo lista de tags`);
 
-        // console.log(`O valor atual é ${tagString.value}`);
-
-        // tagString.value = 'cacete irmao';
-
-        // await novoCompact.estado.CompactLogixInstancia.writeTag(tagString);
-
-        // const tagTeste = new Tag('BD_G5_NOME_OPERADOR');
-        // let teste = await novoCompact.estado.CompactLogixInstancia.readTag(tagTeste);
-
-        // console.log(tagTeste);
+    //     await novoCompact.estado.CompactLogixInstancia.getControllerTagList(tagLista);
+    // console.log(tagLista);
 
 
-        // tagTeste.value = 'cacete irmao';
+    // const tagString = new Structure('BD_G5_NOME_OPERADOR', tagLista)
+    // await novoCompact.estado.CompactLogixInstancia.readTag(tagString);
 
-        // await novoCompact.estado.CompactLogixInstancia.writeTag(tagTeste);
 
-    }, 10000);
+    // console.log(`O valor atual é ${tagString.value}`);
+
+    // tagString.value = 'cacete irmao';
+
+    // await novoCompact.estado.CompactLogixInstancia.writeTag(tagString);
+
+    // const tagTeste = new Tag('BD_G5_NOME_OPERADOR');
+    // let teste = await novoCompact.estado.CompactLogixInstancia.readTag(tagTeste);
+
+    // console.log(tagTeste);
+
+
+    // tagTeste.value = 'cacete irmao';
+
+    // await novoCompact.estado.CompactLogixInstancia.writeTag(tagTeste);
+
+    // }, 10000);
     // setTimeout(() => {
     //     novoCompact.desconectar();
     // }, 20000);
@@ -381,7 +389,7 @@ export class CompactLogix {
 
         if (this.estado.CompactLogixInstancia == undefined) {
             this.log(`Instanciando um novo Controller`);
-            this.estado.CompactLogixInstancia = new Controller(false);
+            this.estado.CompactLogixInstancia = new Controller(true);
 
             this.estado.CompactLogixInstancia.on('close', () => {
                 this.log('Evento detectado: A conexão foi fechada.');
@@ -477,6 +485,32 @@ export class CompactLogix {
 
             controller.scan();
             this.log(`Scan rate setado para 500ms`);
+
+            let observa = async (tag) => {
+
+                const tagObserva = new Tag(`${tag}`);
+                tagObserva.on('Changed', (valor) => {
+                    this.log(`Tag ${tag} ocorreu o evento Changed com o valor: ${valor.value}}`);
+                })
+
+                tagObserva.on('Initialized', (iniciada) => {
+                    this.log(`Tag ${tag} ocorreu o evento Initialized com o valor: ${iniciada}}`);
+                })
+
+                tagObserva.on('KeepAlive', () => {
+                    this.log(`Tag ${tag} ocorreu o evento KeepAlive`);
+                })
+
+                tagObserva.on('Unknown', () => {
+                    this.log(`Tag ${tag} ocorreu o evento Unknown`);
+                })
+
+
+                await controller.readTag(tagObserva);
+                controller.subscribe(tagObserva)
+            }
+
+
 
         } catch (ex) {
             this.log(`Erro ao conectar com o CLP: ${ex}`);
@@ -965,4 +999,5 @@ export class CompactLogix {
 
         this.logger.log(`[CompactLogix ${this.configuracao.ip}] ${conteudoMsg}`)
     }
-}   
+}
+
